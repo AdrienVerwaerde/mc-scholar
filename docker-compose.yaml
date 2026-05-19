@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: mc-scholar-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mc-scholar
+      POSTGRES_PASSWORD: mc-scholar-password
+      POSTGRES_DB: mc-scholar-db
+    ports:
+      - '5432:5432'
+    volumes:
+      - mc-scholar-data:/var/lib/postgresql/data
+
+volumes:
+  mc-scholar-data:
