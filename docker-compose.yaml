@@ -29,6 +29,8 @@ services:
       DATABASE_URL: postgresql://scholartrack:scholartrack@db:5432/scholartrack?schema=public
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-secret-change-me}
       BETTER_AUTH_URL: http://localhost:3000
+      RATE_LIMIT_MAX: 100
+      RATE_LIMIT_WINDOW_MS: 60000
       PORT: 3000
       NODE_ENV: development
     volumes:
