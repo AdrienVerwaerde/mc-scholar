@@ -1,16 +1,45 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: mc-scholar-db
+    container_name: scholartrack-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: mc-scholar
-      POSTGRES_PASSWORD: mc-scholar-password
-      POSTGRES_DB: mc-scholar-db
+      POSTGRES_USER: scholartrack
+      POSTGRES_PASSWORD: scholartrack
+      POSTGRES_DB: scholartrack
     ports:
       - '5432:5432'
     volumes:
-      - mc-scholar-data:/var/lib/postgresql/data
+      - scholartrack-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U scholartrack -d scholartrack']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      target: development
+    container_name: scholartrack-app
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      # Note: "db" est le nom du service Docker, pas localhost
+      DATABASE_URL: postgresql://scholartrack:scholartrack@db:5432/scholartrack?schema=public
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-secret-change-me}
+      BETTER_AUTH_URL: http://localhost:3000
+      PORT: 3000
+      NODE_ENV: development
+    volumes:
+      # Bind mount du code source pour hot reload
+      - .:/app
+      # Volume anonyme pour "protéger" node_modules du host
+      - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
-  mc-scholar-data:
+  scholartrack-data:
