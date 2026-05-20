@@ -1,13 +1,211 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum EvaluationType {
+  EXAM
+  MIDTERM
+  QUIZ
+  HOMEWORK
+  PROJECT
+  ORAL
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+// ============================================================
+// USER (compatible Better Auth)
+// ============================================================
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  name          String
+  image         String?
+  role          Role     @default(STUDENT)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations Better Auth
+  sessions Session_Auth[]
+  accounts Account[]
+
+  // Relations métier
+  taughtCourses Course[]     @relation("CourseTeacher")
+  enrollments   Enrollment[]
+  grades        Grade[]
+  attendances   Attendance[]
+
+  @@map("users")
+}
+
+// ============================================================
+// BETTER AUTH (sessions + accounts)
+// ============================================================
+
+model Session_Auth {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions_auth")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verifications")
+}
+
+// ============================================================
+// MÉTIER
+// ============================================================
+
+model Course {
+  id          String   @id @default(cuid())
+  code        String   @unique // ex: "MATH101"
+  title       String
+  description String?
+  capacity    Int      @default(30)
+  semester    String // ex: "2025-S1"
+  teacherId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  teacher           User               @relation("CourseTeacher", fields: [teacherId], references: [id])
+  enrollments       Enrollment[]
+  evaluationWeights EvaluationWeight[]
+  grades            Grade[]
+  sessions          ClassSession[]
+
+  @@index([teacherId])
+  @@index([semester])
+  @@map("courses")
+}
+
+model EvaluationWeight {
+  id       String         @id @default(cuid())
+  courseId String
+  type     EvaluationType
+  weight   Float // ex: 0.6 pour 60%
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, type]) // un seul poids par type par cours
+  @@map("evaluation_weights")
+}
+
+model Enrollment {
+  id         String   @id @default(cuid())
+  studentId  String
+  courseId   String
+  enrolledAt DateTime @default(now())
+
+  student User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course  Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, courseId]) // pas de double inscription
+  @@index([courseId])
+  @@map("enrollments")
+}
+
+model Grade {
+  id        String         @id @default(cuid())
+  studentId String
+  courseId  String
+  type      EvaluationType
+  value     Float // sur 20
+  comment   String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  student User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course  Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, courseId])
+  @@map("grades")
+}
+
+model ClassSession {
+  id        String   @id @default(cuid())
+  courseId  String
+  date      DateTime
+  topic     String?
+  createdAt DateTime @default(now())
+
+  course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  attendances Attendance[]
+
+  @@index([courseId, date])
+  @@map("class_sessions")
+}
+
+model Attendance {
+  id        String           @id @default(cuid())
+  sessionId String
+  studentId String
+  status    AttendanceStatus @default(PRESENT)
+  createdAt DateTime         @default(now())
+
+  session ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student User         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId]) // un seul statut par étudiant par session
+  @@map("attendances")
 }
