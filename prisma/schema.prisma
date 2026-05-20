@@ -7,7 +7,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-
 }
 
 // ============================================================
@@ -37,7 +36,7 @@ enum AttendanceStatus {
 }
 
 // ============================================================
-// USER (compatible Better Auth)
+// BETTER AUTH MODELS (noms imposés par Better Auth)
 // ============================================================
 
 model User {
@@ -46,12 +45,12 @@ model User {
   emailVerified Boolean  @default(false)
   name          String
   image         String?
+  // Champ custom métier : on l'ajoutera via Better Auth additionalFields
   role          Role     @default(STUDENT)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  // Relations Better Auth
-  sessions Session_Auth[]
+  sessions Session[]
   accounts Account[]
 
   // Relations métier
@@ -60,14 +59,10 @@ model User {
   grades        Grade[]
   attendances   Attendance[]
 
-  @@map("users")
+  @@map("user")
 }
 
-// ============================================================
-// BETTER AUTH (sessions + accounts)
-// ============================================================
-
-model Session_Auth {
+model Session {
   id        String   @id @default(cuid())
   userId    String
   token     String   @unique
@@ -79,7 +74,7 @@ model Session_Auth {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("sessions_auth")
+  @@map("session")
 }
 
 model Account {
@@ -99,7 +94,7 @@ model Account {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("accounts")
+  @@map("account")
 }
 
 model Verification {
@@ -110,7 +105,7 @@ model Verification {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@map("verifications")
+  @@map("verification")
 }
 
 // ============================================================
