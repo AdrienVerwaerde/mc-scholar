@@ -7,14 +7,14 @@ describe('RateLimitService', () => {
         service = new RateLimitService();
     });
 
-    it('autorise les requêtes en-dessous du seuil', () => {
+    it('allows requests below the threshold', () => {
         const opts = { maxRequests: 3, windowMs: 1000 };
         expect(service.check('user:1', opts).allowed).toBe(true);
         expect(service.check('user:1', opts).allowed).toBe(true);
         expect(service.check('user:1', opts).allowed).toBe(true);
     });
 
-    it('refuse au-delà du seuil', () => {
+    it('rejects requests beyond the threshold', () => {
         const opts = { maxRequests: 2, windowMs: 1000 };
         service.check('user:1', opts);
         service.check('user:1', opts);
@@ -24,14 +24,14 @@ describe('RateLimitService', () => {
         expect(result.retryAfterMs).toBeGreaterThan(0);
     });
 
-    it('isole les compteurs par clientId', () => {
+    it('isolates counters per clientId', () => {
         const opts = { maxRequests: 1, windowMs: 1000 };
         expect(service.check('user:1', opts).allowed).toBe(true);
         expect(service.check('user:2', opts).allowed).toBe(true);
         expect(service.check('user:1', opts).allowed).toBe(false);
     });
 
-    it('libère les slots après la fenêtre (fenêtre glissante)', async () => {
+    it('releases slots after the window expires (sliding window)', async () => {
         const opts = { maxRequests: 1, windowMs: 50 };
         expect(service.check('user:1', opts).allowed).toBe(true);
         expect(service.check('user:1', opts).allowed).toBe(false);
@@ -41,14 +41,14 @@ describe('RateLimitService', () => {
         expect(service.check('user:1', opts).allowed).toBe(true);
     });
 
-    it('expose remaining correctement', () => {
+    it('exposes remaining correctly', () => {
         const opts = { maxRequests: 3, windowMs: 1000 };
         expect(service.check('user:1', opts).remaining).toBe(2);
         expect(service.check('user:1', opts).remaining).toBe(1);
         expect(service.check('user:1', opts).remaining).toBe(0);
     });
 
-    it('reset vide le store', () => {
+    it('reset clears the store', () => {
         service.check('user:1', { maxRequests: 1, windowMs: 1000 });
         expect(service.size()).toBe(1);
         service.reset();

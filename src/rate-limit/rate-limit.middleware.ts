@@ -8,12 +8,12 @@ import type { Request, Response, NextFunction } from 'express';
 import { RateLimitService } from './rate-limit.service';
 
 /**
- * Middleware de rate limiting global.
+ * Global rate limiting middleware.
  *
- * Identifie le client par userId si authentifié, sinon par IP.
- * Renvoie 429 + header Retry-After au-delà du seuil.
+ * Identifies the client by userId if authenticated, otherwise by IP.
+ * Returns 429 + Retry-After header when the threshold is exceeded.
  *
- * Configuration via variables d'environnement :
+ * Configured via environment variables:
  * - RATE_LIMIT_MAX (default 100)
  * - RATE_LIMIT_WINDOW_MS (default 60000)
  */
@@ -35,7 +35,7 @@ export class RateLimitMiddleware implements NestMiddleware {
             windowMs: this.windowMs,
         });
 
-        // Headers informatifs (standard HTTP)
+        // Informational headers (standard HTTP)
         res.setHeader('X-RateLimit-Limit', this.maxRequests);
         res.setHeader('X-RateLimit-Remaining', result.remaining);
 
@@ -56,9 +56,9 @@ export class RateLimitMiddleware implements NestMiddleware {
     }
 
     /**
-     * Préfère userId si authentifié, sinon retombe sur l'IP.
-     * On préfixe pour éviter qu'un user avec un id numérique
-     * entre en collision avec une IP du même format.
+     * Prefers userId if authenticated, falls back to IP otherwise.
+     * A prefix is added to prevent a numeric user id from colliding
+     * with an IP that happens to have the same format.
      */
     private resolveClientId(req: Request): string {
         const userId = (req as any).session?.user?.id;

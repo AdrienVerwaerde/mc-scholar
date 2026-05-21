@@ -14,7 +14,7 @@ export class AppController {
     return this.appService.getHello();
   }
 
-  // Route protégée : nécessite une session valide
+  // Protected route: requires a valid session
   @Get('me')
   getMe(@Session() session: UserSession) {
     return {

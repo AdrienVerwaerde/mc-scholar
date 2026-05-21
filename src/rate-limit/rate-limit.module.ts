@@ -8,7 +8,7 @@ import { RateLimitMiddleware } from './rate-limit.middleware';
 })
 export class RateLimitModule implements NestModule {
     configure(consumer: MiddlewareConsumer) {
-        // Applique le rate limiting à TOUTES les routes
+        // Applies rate limiting to ALL routes
         consumer.apply(RateLimitMiddleware).forRoutes('*');
     }
 }
