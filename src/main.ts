@@ -23,9 +23,14 @@ async function bootstrap() {
 
   // Swagger
   const config = new DocumentBuilder()
-    .setTitle('MC Scholar API')
-    .setDescription('Academic management system')
+    .setTitle('ScholarTrack API')
+    .setDescription(
+      'Academic management system — courses, enrollments, grades, attendance, and reporting.\n\n' +
+      'Authentication: sign in via `POST /api/auth/sign-in/email`, then use the `Authorize` button ' +
+      'and paste your session token to access protected routes.',
+    )
     .setVersion('1.0')
+    .addBearerAuth()
     .addCookieAuth('better-auth.session_token')
     .build();
   const document = SwaggerModule.createDocument(app, config);
