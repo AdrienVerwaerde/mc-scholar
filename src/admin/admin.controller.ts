@@ -12,6 +12,13 @@ import { Roles } from '../auth/decorators/roles.decorator';
 export class AdminController {
     constructor(private readonly adminService: AdminService) { }
 
+    @Get('stats')
+    @ApiOperation({ summary: 'Global stats for a semester (ADMIN only)' })
+    @ApiQuery({ name: 'semester', example: '2026-S1' })
+    getSemesterStats(@Query('semester') semester: string) {
+        return this.adminService.getSemesterStats(semester);
+    }
+
     @Get('export')
     @ApiOperation({ summary: 'Download semester results as CSV (ADMIN only)' })
     @ApiQuery({ name: 'semester', example: '2026-S1' })

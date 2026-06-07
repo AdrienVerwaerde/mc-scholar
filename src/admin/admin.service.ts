@@ -140,6 +140,147 @@ export class AdminService {
         return this.buildCsv(rows);
     }
 
+    async getSemesterStats(semester: string) {
+        if (!semester) throw new BadRequestException('semester query param is required');
+
+        const threshold = parseFloat(process.env.AT_RISK_THRESHOLD ?? '0.20');
+
+        // All courses for the semester
+        const courses = await this.prisma.course.findMany({
+            where: { semester },
+            select: {
+                id: true,
+                code: true,
+                title: true,
+                teacher: { select: { name: true } },
+                _count: { select: { enrollments: true } },
+            },
+        });
+
+        if (!courses.length) {
+            return {
+                semester,
+                totalCourses: 0,
+                totalStudents: 0,
+                totalEnrollments: 0,
+                averageGrade: null,
+                totalSessions: 0,
+                atRiskStudents: 0,
+                courses: [],
+            };
+        }
+
+        const courseIds = courses.map((c) => c.id);
+
+        // Run all aggregation queries in parallel
+        const [
+            uniqueStudents,
+            gradeAgg,
+            gradesByCourse,
+            sessions,
+            absenceRecords,
+        ] = await Promise.all([
+            // Unique enrolled students
+            this.prisma.enrollment.groupBy({
+                by: ['studentId'],
+                where: { courseId: { in: courseIds } },
+            }),
+            // Global grade average
+            this.prisma.grade.aggregate({
+                where: { courseId: { in: courseIds } },
+                _avg: { value: true },
+                _count: { value: true },
+            }),
+            // Grade count + average per course
+            this.prisma.grade.groupBy({
+                by: ['courseId'],
+                where: { courseId: { in: courseIds } },
+                _count: { value: true },
+                _avg: { value: true },
+            }),
+            // Sessions per course
+            this.prisma.classSession.groupBy({
+                by: ['courseId'],
+                where: { courseId: { in: courseIds } },
+                _count: { id: true },
+            }),
+            // ABSENT records: (studentId, courseId) via session join
+            this.prisma.attendance.findMany({
+                where: {
+                    status: 'ABSENT',
+                    session: { courseId: { in: courseIds } },
+                },
+                select: { studentId: true, session: { select: { courseId: true } } },
+            }),
+        ]);
+
+        // Build lookup maps
+        const gradeMap = new Map(gradesByCourse.map((g) => [g.courseId, g]));
+        const sessionMap = new Map(sessions.map((s) => [s.courseId, s._count.id]));
+
+        // Compute at-risk per (student, course)
+        const absentCount = new Map<string, number>(); // key: `${studentId}:${courseId}`
+        for (const a of absenceRecords) {
+            const key = `${a.studentId}:${a.session.courseId}`;
+            absentCount.set(key, (absentCount.get(key) ?? 0) + 1);
+        }
+
+        // Enrollments per course (for atRisk denominator)
+        const enrollmentsByCourse = await this.prisma.enrollment.findMany({
+            where: { courseId: { in: courseIds } },
+            select: { studentId: true, courseId: true },
+        });
+
+        const atRiskPairs = new Set<string>(); // `${studentId}:${courseId}`
+        const atRiskStudentIds = new Set<string>();
+
+        for (const { studentId, courseId } of enrollmentsByCourse) {
+            const totalSessions = sessionMap.get(courseId) ?? 0;
+            if (totalSessions === 0) continue;
+            const absences = absentCount.get(`${studentId}:${courseId}`) ?? 0;
+            if (absences / totalSessions > threshold) {
+                atRiskPairs.add(`${studentId}:${courseId}`);
+                atRiskStudentIds.add(studentId);
+            }
+        }
+
+        // Per-course atRisk count
+        const atRiskByCourse = new Map<string, number>();
+        for (const pair of atRiskPairs) {
+            const courseId = pair.split(':')[1];
+            atRiskByCourse.set(courseId, (atRiskByCourse.get(courseId) ?? 0) + 1);
+        }
+
+        const courseStats = courses.map((c) => {
+            const g = gradeMap.get(c.id);
+            const avgGrade = g?._avg.value != null ? Math.round(g._avg.value * 100) / 100 : null;
+            return {
+                id: c.id,
+                code: c.code,
+                title: c.title,
+                teacher: c.teacher.name,
+                enrollments: c._count.enrollments,
+                grades: g?._count.value ?? 0,
+                averageGrade: avgGrade,
+                sessions: sessionMap.get(c.id) ?? 0,
+                atRiskStudents: atRiskByCourse.get(c.id) ?? 0,
+            };
+        });
+
+        const globalAvg = gradeAgg._avg.value;
+
+        return {
+            semester,
+            totalCourses: courses.length,
+            totalStudents: uniqueStudents.length,
+            totalEnrollments: enrollmentsByCourse.length,
+            averageGrade: globalAvg != null ? Math.round(globalAvg * 100) / 100 : null,
+            totalSessions: sessions.reduce((s, r) => s + r._count.id, 0),
+            atRiskStudents: atRiskStudentIds.size,
+            courses: courseStats,
+        };
+    }
+
     async importEnrollmentsCsv(file: { buffer: Buffer }): Promise<object> {
         const lines = file.buffer
             .toString('utf8')
