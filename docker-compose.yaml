@@ -31,6 +31,7 @@ services:
       BETTER_AUTH_URL: http://localhost:3000
       RATE_LIMIT_MAX: 100
       RATE_LIMIT_WINDOW_MS: 60000
+      AT_RISK_THRESHOLD: 0.20
       PORT: 3000
       NODE_ENV: development
     volumes:

@@ -33,6 +33,17 @@ export class AttendancesController {
         return this.attendancesService.listSessions(courseId, caller);
     }
 
+    @Get('courses/:courseId/attendance-rate')
+    @ApiOperation({
+        summary: 'Attendance rate per student for a course. TEACHER sees all; STUDENT sees own; ADMIN sees all.',
+    })
+    getAttendanceRate(
+        @Param('courseId') courseId: string,
+        @CurrentUser() caller: AuthenticatedUser,
+    ) {
+        return this.attendancesService.getAttendanceRate(courseId, caller);
+    }
+
     @Post('sessions/:sessionId/attendances')
     @Roles('TEACHER', 'ADMIN')
     @ApiOperation({ summary: 'Bulk-record attendances for a session (upsert, all-or-nothing)' })

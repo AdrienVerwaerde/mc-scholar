@@ -109,4 +109,77 @@ export class AttendancesService {
             recorded: dto.attendances.length,
         };
     }
+
+    async getAttendanceRate(courseId: string, caller: { id: string; role: Role }) {
+        const course = await this.prisma.course.findUnique({
+            where: { id: courseId },
+            select: { teacherId: true },
+        });
+        if (!course) throw new NotFoundException(`Course ${courseId} not found`);
+
+        if (caller.role === Role.TEACHER && course.teacherId !== caller.id) {
+            throw new ForbiddenException('You do not teach this course');
+        }
+
+        if (caller.role === Role.STUDENT) {
+            const enrollment = await this.prisma.enrollment.findUnique({
+                where: { studentId_courseId: { studentId: caller.id, courseId } },
+            });
+            if (!enrollment) throw new ForbiddenException('You are not enrolled in this course');
+        }
+
+        const threshold = parseFloat(process.env.AT_RISK_THRESHOLD ?? '0.20');
+
+        const totalSessions = await this.prisma.classSession.count({ where: { courseId } });
+
+        // Determine target students
+        const enrollments = await this.prisma.enrollment.findMany({
+            where: { courseId },
+            select: { studentId: true, student: { select: { name: true, email: true } } },
+        });
+
+        const targetStudents =
+            caller.role === Role.STUDENT
+                ? enrollments.filter((e) => e.studentId === caller.id)
+                : enrollments;
+
+        // Fetch all attendance records for this course in one query
+        const allAttendances = await this.prisma.attendance.findMany({
+            where: { session: { courseId } },
+            select: { studentId: true, status: true },
+        });
+
+        // Group by studentId
+        const byStudent = new Map<string, { PRESENT: number; LATE: number; ABSENT: number; EXCUSED: number }>();
+        for (const a of allAttendances) {
+            if (!byStudent.has(a.studentId)) {
+                byStudent.set(a.studentId, { PRESENT: 0, LATE: 0, ABSENT: 0, EXCUSED: 0 });
+            }
+            const entry = byStudent.get(a.studentId)!;
+            entry[a.status as 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED']++;
+        }
+
+        return targetStudents.map(({ studentId, student }) => {
+            const counts = byStudent.get(studentId) ?? { PRESENT: 0, LATE: 0, ABSENT: 0, EXCUSED: 0 };
+            const attended = counts.PRESENT + counts.LATE;
+            const absent = counts.ABSENT;
+            const unrecorded = totalSessions - (attended + absent + counts.EXCUSED);
+            const absenceRate = totalSessions > 0 ? absent / totalSessions : 0;
+            const attendanceRate = totalSessions > 0 ? attended / totalSessions : null;
+
+            return {
+                studentId,
+                name: student.name,
+                email: student.email,
+                totalSessions,
+                attended,
+                absences: absent,
+                excused: counts.EXCUSED,
+                unrecorded,
+                attendanceRate: attendanceRate !== null ? Math.round(attendanceRate * 1000) / 1000 : null,
+                absenceRate: Math.round(absenceRate * 1000) / 1000,
+                atRisk: totalSessions > 0 && absenceRate > threshold,
+            };
+        });
+    }
 }
