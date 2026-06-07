@@ -7,6 +7,7 @@ import { RateLimitModule } from './rate-limit/rate-limit.module';
 import { UsersModule } from './users/users.module';
 import { CoursesModule } from './courses/courses.module';
 import { EnrollmentsModule } from './enrollments/enrollments.module';
+import { GradesModule } from './grades/grades.module';
 
 
 @Module({
@@ -17,6 +18,7 @@ import { EnrollmentsModule } from './enrollments/enrollments.module';
     UsersModule,
     CoursesModule,
     EnrollmentsModule,
+    GradesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

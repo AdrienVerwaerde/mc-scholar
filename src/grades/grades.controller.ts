@@ -1,0 +1,109 @@
+import {
+    Body,
+    Controller,
+    Delete,
+    Get,
+    Param,
+    Patch,
+    Post,
+    Query,
+    UploadedFile,
+    UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBody, ApiConsumes, ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { GradesService } from './grades.service';
+import { CreateGradeDto } from './dto/create-grade.dto';
+import { UpdateGradeDto } from './dto/update-grade.dto';
+import { ListGradesQueryDto } from './dto/list-grades.query.dto';
+import { GetAverageQueryDto } from './dto/get-average.query.dto';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
+
+@ApiTags('grades')
+@ApiBearerAuth()
+@Controller('grades')
+export class GradesController {
+    constructor(private readonly gradesService: GradesService) { }
+
+    @Post()
+    @Roles('TEACHER', 'ADMIN')
+    @ApiOperation({ summary: 'Record a grade (TEACHER on own course, or ADMIN)' })
+    create(
+        @Body() dto: CreateGradeDto,
+        @CurrentUser() caller: AuthenticatedUser,
+    ) {
+        return this.gradesService.create(dto, caller);
+    }
+
+    @Get()
+    @ApiOperation({
+        summary:
+            'List grades. STUDENT sees own; TEACHER sees own courses; ADMIN sees all.',
+    })
+    list(
+        @Query() query: ListGradesQueryDto,
+        @CurrentUser() caller: AuthenticatedUser,
+    ) {
+        return this.gradesService.listForCaller(caller, query);
+    }
+
+    @Get('average')
+    @ApiOperation({
+        summary:
+            'Weighted average for a course. STUDENT sees own; TEACHER sees all students on their course; ADMIN sees all.',
+    })
+    getAverage(
+        @Query() query: GetAverageQueryDto,
+        @CurrentUser() caller: AuthenticatedUser,
+    ) {
+        return this.gradesService.getAverage(caller, query);
+    }
+
+    @Post('import')
+    @Roles('TEACHER', 'ADMIN')
+    @UseInterceptors(FileInterceptor('file'))
+    @ApiConsumes('multipart/form-data')
+    @ApiBody({
+        schema: {
+            type: 'object',
+            required: ['file'],
+            properties: {
+                file: { type: 'string', format: 'binary' },
+            },
+        },
+    })
+    @ApiOperation({
+        summary:
+            'Bulk-import grades from a CSV (studentId,type,value,comment). All-or-nothing: any error aborts the whole import.',
+    })
+    importCsv(
+        @Query('courseId') courseId: string,
+        @UploadedFile() file: { buffer: Buffer; originalname: string },
+        @CurrentUser() caller: AuthenticatedUser,
+    ) {
+        return this.gradesService.importCsv(courseId, file, caller);
+    }
+
+    @Patch(':id')
+    @Roles('TEACHER', 'ADMIN')
+    @ApiOperation({ summary: 'Update a grade (owner of the course, or ADMIN)' })
+    update(
+        @Param('id') id: string,
+        @Body() dto: UpdateGradeDto,
+        @CurrentUser() caller: AuthenticatedUser,
+    ) {
+        return this.gradesService.update(id, dto, caller);
+    }
+
+    @Delete(':id')
+    @Roles('TEACHER', 'ADMIN')
+    @ApiOperation({ summary: 'Delete a grade (owner of the course, or ADMIN)' })
+    remove(
+        @Param('id') id: string,
+        @CurrentUser() caller: AuthenticatedUser,
+    ) {
+        return this.gradesService.remove(id, caller);
+    }
+}
