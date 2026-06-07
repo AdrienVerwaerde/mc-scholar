@@ -1,98 +1,155 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# MC Scholar — Academic Management API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A NestJS REST API for managing courses, students, teachers, grades, and attendance in an academic institution.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Tech Stack
 
-## Description
+| Layer | Technology |
+|---|---|
+| Framework | NestJS (TypeScript) |
+| ORM | Prisma |
+| Database | PostgreSQL 16 |
+| Auth | Better Auth (session cookies) |
+| Validation | class-validator + class-transformer |
+| Tests | Jest (unit + integration) |
+| API Docs | Swagger / OpenAPI |
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+---
 
-## Project setup
+## Setup
+
+### Prerequisites
+
+- Docker + Docker Compose
+
+### Run with Docker (recommended)
 
 ```bash
-$ npm install
+# Copy environment file
+cp .env.example .env
+# Edit BETTER_AUTH_SECRET with a random string (required in production)
+
+# Build and start everything (app + PostgreSQL)
+docker compose up -d --build
+
+# Run Prisma migrations
+docker compose exec app npx prisma migrate deploy
+
+# (Optional) Seed a first admin account
+docker compose exec app npx prisma db seed
 ```
 
-## Compile and run the project
+The API is available at **http://localhost:3000**.  
+Swagger UI is at **http://localhost:3000/api/docs**.
+
+### Run without Docker
 
 ```bash
-# development
-$ npm run start
+# 1. Install dependencies
+npm install
 
-# watch mode
-$ npm run start:dev
+# 2. Start a PostgreSQL instance and fill in DATABASE_URL in .env
+cp .env.example .env
 
-# production mode
-$ npm run start:prod
+# 3. Run migrations
+npx prisma migrate deploy
+
+# 4. Start in watch mode
+npm run start:dev
 ```
 
-## Run tests
+---
+
+## Scripts
+
+| Command | Description |
+|---|---|
+| `npm run start:dev` | Start in watch mode (auto-reload) |
+| `npm run start:prod` | Start compiled production build |
+| `npm run build` | Compile TypeScript to `dist/` |
+| `npm run test` | Run unit + integration tests |
+| `npm run test:cov` | Run tests with coverage report |
+| `npm run lint` | Lint and auto-fix with ESLint |
+| `npm run format` | Format with Prettier |
+| `npm run docker:up` | Start containers in background |
+| `npm run docker:down` | Stop and remove containers |
+| `npm run docker:logs` | Follow app container logs |
+| `npm run docker:rebuild` | Rebuild image and restart |
+| `npm run docker:shell` | Open a shell inside the app container |
+| `npm run docker:prisma` | Run Prisma CLI inside the container |
+
+---
+
+## Modules
+
+### `AuthModule`
+Session-based authentication via Better Auth. Exposes `/api/auth/**` routes (sign-in, sign-out, session). All other routes require an active session.
+
+### `UsersModule`
+Admin-only CRUD for user accounts (`STUDENT`, `TEACHER`, `ADMIN`). New accounts are created via Better Auth then promoted to the requested role.  
+Routes: `POST /admin/users`, `GET /admin/users`, `GET /admin/users/:id`
+
+### `CoursesModule`
+Course catalogue with role-based access. Teachers create and own courses; students browse. Supports evaluation weight configuration (must sum to 1) and capacity enforcement via a dedicated pipe.  
+Routes: `GET /courses`, `POST /courses`, `PATCH /courses/:id`, `DELETE /courses/:id`, `PUT /courses/:id/weights`
+
+### `EnrollmentsModule`
+Student enrollment with capacity checks. The `CourseCapacityPipe` rejects over-capacity requests before the controller runs.  
+Routes: `POST /courses/:id/enroll`, `DELETE /courses/:id/enroll`, `GET /me/enrollments`
+
+### `GradesModule`
+Grade recording, weighted average computation, and bulk CSV import (all-or-nothing). Each evaluation type is configured per course; the average normalises over graded types only and flags `isPartial: true` when some types are missing.  
+Routes: `POST /grades`, `GET /grades`, `PATCH /grades/:id`, `DELETE /grades/:id`, `GET /grades/average`, `POST /grades/import`
+
+### `AttendancesModule`
+Class session management and attendance recording (bulk upsert per session). Computes per-student attendance rates and flags students as `atRisk` when their absence rate exceeds the configurable threshold.  
+Routes: `POST /courses/:courseId/sessions`, `GET /courses/:courseId/sessions`, `GET /courses/:courseId/attendance-rate`, `POST /sessions/:sessionId/attendances`
+
+### `AdminModule`
+Reporting and bulk operations for administrators.
+- `GET /admin/stats?semester=` — aggregated semester statistics (courses, students, grades, atRisk count)
+- `GET /admin/export?semester=` — semester results as a downloadable CSV
+- `POST /admin/import/enrollments` — bulk enrollment import from CSV (duplicates skipped, capacity enforced, per-row error reporting)
+
+### `RateLimitModule`
+Manual sliding-window rate limiter applied globally. Identifies clients by authenticated user ID or IP address. Returns `429 Too Many Requests` with a `Retry-After` header when the threshold is exceeded.
+
+---
+
+## Environment Variables
+
+See [`.env.example`](.env.example) for the full list. Key variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `DATABASE_URL` | — | PostgreSQL connection string |
+| `BETTER_AUTH_SECRET` | — | Secret for signing sessions (change in production) |
+| `BETTER_AUTH_URL` | `http://localhost:3000` | Public URL of the API |
+| `PORT` | `3000` | HTTP port |
+| `RATE_LIMIT_MAX` | `100` | Max requests per window per client |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limit window in milliseconds |
+| `AT_RISK_THRESHOLD` | `0.20` | Absence rate above which a student is flagged atRisk |
+
+---
+
+## API Documentation
+
+Interactive Swagger UI: **http://localhost:3000/api/docs**
+
+All routes require Bearer authentication. Use the **Authorize** button in Swagger and paste your session token, or authenticate via `POST /api/auth/sign-in/email` first.
+
+---
+
+## Tests
 
 ```bash
-# unit tests
-$ npm run test
+# Inside Docker (recommended — matches the runtime environment)
+docker compose exec app npx jest --no-coverage
+docker compose exec app npx jest --coverage
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+# Or directly on the host
+npm run test
+npm run test:cov
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+168 tests across 18 suites — 84.75% statement coverage.

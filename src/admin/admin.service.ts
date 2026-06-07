@@ -5,6 +5,12 @@ import { PrismaService } from '../prisma/prisma.service';
 export class AdminService {
     constructor(private readonly prisma: PrismaService) { }
 
+    /**
+     * Builds a CSV with one row per enrollment for the given semester.
+     * Columns: student info, course info, weighted average (normalised over graded types),
+     * attendance rate, absence rate, and atRisk flag.
+     * Returns an RFC 4180-compliant CSV string (CRLF line endings, quoted special chars).
+     */
     async exportSemesterCsv(semester: string): Promise<string> {
         if (!semester) throw new BadRequestException('semester query param is required');
 
@@ -140,6 +146,11 @@ export class AdminService {
         return this.buildCsv(rows);
     }
 
+    /**
+     * Returns aggregated statistics for a semester: total courses, unique students,
+     * global grade average, session count, and atRisk student count.
+     * Also includes per-course breakdown. Runs 5 Prisma queries in parallel to avoid N+1.
+     */
     async getSemesterStats(semester: string) {
         if (!semester) throw new BadRequestException('semester query param is required');
 
@@ -281,6 +292,12 @@ export class AdminService {
         };
     }
 
+    /**
+     * Bulk-imports enrollments from a CSV with `studentId` and `courseId` columns.
+     * Per-row strategy: duplicates are skipped (not errors), capacity violations are
+     * reported as failed rows, valid rows are inserted in a single transaction at the end.
+     * Batch seat tracking prevents two rows from both claiming the last available seat.
+     */
     async importEnrollmentsCsv(file: { buffer: Buffer }): Promise<object> {
         const lines = file.buffer
             .toString('utf8')

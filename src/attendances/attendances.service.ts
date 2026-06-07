@@ -13,6 +13,7 @@ import { BulkAttendanceDto } from './dto/bulk-attendance.dto';
 export class AttendancesService {
     constructor(private readonly prisma: PrismaService) { }
 
+    /** Creates a class session for a course. Caller must be the course's teacher or ADMIN. */
     async createSession(
         courseId: string,
         dto: CreateSessionDto,
@@ -32,6 +33,7 @@ export class AttendancesService {
         });
     }
 
+    /** Lists sessions for a course. TEACHER must own it; STUDENT must be enrolled; ADMIN sees any. */
     async listSessions(courseId: string, caller: { id: string; role: Role }) {
         const course = await this.prisma.course.findUnique({
             where: { id: courseId },
@@ -57,6 +59,11 @@ export class AttendancesService {
         });
     }
 
+    /**
+     * Upserts attendance records for a session in a single transaction.
+     * All submitted student IDs must be enrolled in the course; any unknown
+     * student ID causes the whole request to be rejected (fail-fast).
+     */
     async bulkRecord(
         sessionId: string,
         dto: BulkAttendanceDto,
@@ -110,6 +117,13 @@ export class AttendancesService {
         };
     }
 
+    /**
+     * Returns per-student attendance stats for a course.
+     * STUDENT receives only their own row; TEACHER and ADMIN see all enrolled students.
+     * `atRisk` is true when absenceRate (ABSENT / totalSessions) exceeds AT_RISK_THRESHOLD.
+     * EXCUSED absences and unrecorded sessions are reported separately but do not count
+     * against the student for the atRisk calculation.
+     */
     async getAttendanceRate(courseId: string, caller: { id: string; role: Role }) {
         const course = await this.prisma.course.findUnique({
             where: { id: courseId },

@@ -73,6 +73,7 @@ export class GradesService {
         });
     }
 
+    /** Updates a grade's value/comment. Caller must own the course or be ADMIN. */
     async update(
         gradeId: string,
         dto: UpdateGradeDto,
@@ -87,6 +88,7 @@ export class GradesService {
         });
     }
 
+    /** Deletes a grade. Caller must own the course or be ADMIN. */
     async remove(gradeId: string, caller: { id: string; role: Role }) {
         const grade = await this.getGradeOrThrow(gradeId);
         await this.assertCallerOwnsCourse(grade.courseId, caller);
