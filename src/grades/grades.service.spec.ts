@@ -242,3 +242,171 @@ describe('GradesService.getAverage', () => {
         expect(result.weightedAverage).toBe(13);
     });
 });
+
+// ---------- remove ----------
+
+describe('GradesService.remove', () => {
+    let service: GradesService;
+    let prisma: ReturnType<typeof makePrisma>;
+
+    beforeEach(() => {
+        prisma = makePrisma();
+        service = new GradesService(prisma as any);
+    });
+
+    it('deletes grade and returns { deleted: true }', async () => {
+        prisma.grade.findUnique.mockResolvedValue({ id: 'grade-1', courseId: 'course-1' });
+        prisma.course.findUnique.mockResolvedValue(COURSE);
+        prisma.grade.delete.mockResolvedValue({});
+
+        const result = await service.remove('grade-1', TEACHER);
+
+        expect(prisma.grade.delete).toHaveBeenCalledWith({ where: { id: 'grade-1' } });
+        expect(result).toEqual({ deleted: true });
+    });
+
+    it('throws NotFoundException when grade does not exist', async () => {
+        prisma.grade.findUnique.mockResolvedValue(null);
+
+        await expect(service.remove('grade-1', TEACHER)).rejects.toThrow(NotFoundException);
+    });
+
+    it('allows ADMIN to delete any grade', async () => {
+        prisma.grade.findUnique.mockResolvedValue({ id: 'grade-1', courseId: 'course-1' });
+        prisma.grade.delete.mockResolvedValue({});
+
+        await expect(service.remove('grade-1', ADMIN)).resolves.toEqual({ deleted: true });
+    });
+});
+
+// ---------- listForCaller ----------
+
+describe('GradesService.listForCaller', () => {
+    let service: GradesService;
+    let prisma: ReturnType<typeof makePrisma>;
+
+    beforeEach(() => {
+        prisma = makePrisma();
+        service = new GradesService(prisma as any);
+        prisma.grade.findMany.mockResolvedValue([]);
+    });
+
+    it('restricts STUDENT to their own grades', async () => {
+        await service.listForCaller(STUDENT, {});
+
+        expect(prisma.grade.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({ studentId: STUDENT.id }),
+            }),
+        );
+    });
+
+    it('restricts TEACHER to courses they teach', async () => {
+        await service.listForCaller(TEACHER, {});
+
+        expect(prisma.grade.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({ course: { teacherId: TEACHER.id } }),
+            }),
+        );
+    });
+
+    it('applies no extra filter for ADMIN', async () => {
+        await service.listForCaller(ADMIN, {});
+
+        const call = prisma.grade.findMany.mock.calls[0][0];
+        expect(call.where).not.toHaveProperty('studentId');
+        expect(call.where).not.toHaveProperty('course');
+    });
+
+    it('applies courseId and type filters when provided', async () => {
+        await service.listForCaller(ADMIN, { courseId: 'c1', type: 'EXAM' });
+
+        expect(prisma.grade.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({ courseId: 'c1', type: 'EXAM' }),
+            }),
+        );
+    });
+});
+
+// ---------- getAverage — extra paths ----------
+
+describe('GradesService.getAverage — extra paths', () => {
+    let service: GradesService;
+    let prisma: ReturnType<typeof makePrisma>;
+
+    beforeEach(() => {
+        prisma = makePrisma();
+        service = new GradesService(prisma as any);
+        prisma.course.findUnique.mockResolvedValue(COURSE);
+    });
+
+    it('returns average for a specific studentId when TEACHER queries it', async () => {
+        prisma.grade.findMany.mockResolvedValue([{ type: 'EXAM', value: 12 }]);
+
+        const [result] = await service.getAverage(TEACHER, { courseId: 'course-1', studentId: 'student-1' });
+
+        expect(result.weightedAverage).toBe(12);
+    });
+
+    it('returns averages for all enrolled students when called without studentId', async () => {
+        prisma.enrollment.findMany.mockResolvedValue([
+            { studentId: 'student-1', student: { name: 'Alice', email: 'alice@test.com' } },
+            { studentId: 'student-2', student: { name: 'Bob', email: 'bob@test.com' } },
+        ]);
+        prisma.grade.findMany.mockResolvedValue([]);
+
+        const results = await service.getAverage(TEACHER, { courseId: 'course-1' });
+
+        expect(results).toHaveLength(2);
+    });
+
+    it('throws NotFoundException when course does not exist', async () => {
+        prisma.course.findUnique.mockResolvedValue(null);
+
+        await expect(service.getAverage(STUDENT, { courseId: 'nope' })).rejects.toThrow(NotFoundException);
+    });
+});
+
+// ---------- importCsv — extra paths ----------
+
+describe('GradesService.importCsv — extra paths', () => {
+    let service: GradesService;
+    let prisma: ReturnType<typeof makePrisma>;
+
+    const makeCsv = (body: string) => ({
+        buffer: Buffer.from(`studentId,type,value\n${body}`),
+        originalname: 'grades.csv',
+    });
+
+    beforeEach(() => {
+        prisma = makePrisma();
+        service = new GradesService(prisma as any);
+        prisma.course.findUnique.mockResolvedValue(COURSE);
+        prisma.enrollment.findMany.mockResolvedValue([{ studentId: 'student-1' }]);
+    });
+
+    it('returns error when value field is missing', async () => {
+        const csv = {
+            buffer: Buffer.from('studentId,type\nstudent-1,EXAM'),
+            originalname: 'grades.csv',
+        };
+        const result = await service.importCsv('course-1', csv, TEACHER) as any;
+
+        expect(result.success).toBe(false);
+        expect(result.errors[0].error).toMatch(/missing value/);
+    });
+
+    it('handles quoted fields in CSV correctly', async () => {
+        const csv = {
+            buffer: Buffer.from(`studentId,type,value,comment\nstudent-1,EXAM,15,"Good, well done"`),
+            originalname: 'grades.csv',
+        };
+        prisma.grade.create.mockResolvedValue({});
+
+        const result = await service.importCsv('course-1', csv, TEACHER);
+
+        expect(result).toMatchObject({ success: true, imported: 1 });
+    });
+});
