@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { EnrollmentsService } from './enrollments.service';
 import { CoursesModule } from '../courses/courses.module';
-import { EnrollmentsController } from './enrollments.controler';
+import { EnrollmentsController } from './enrollments.controller';
 
 @Module({
     imports: [CoursesModule], // for CourseCapacityPipe
