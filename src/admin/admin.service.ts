@@ -140,6 +140,106 @@ export class AdminService {
         return this.buildCsv(rows);
     }
 
+    async importEnrollmentsCsv(file: { buffer: Buffer }): Promise<object> {
+        const lines = file.buffer
+            .toString('utf8')
+            .replace(/\r\n/g, '\n')
+            .replace(/\r/g, '\n')
+            .split('\n')
+            .filter((l) => l.trim());
+
+        if (!lines.length) throw new BadRequestException('CSV file is empty');
+
+        const headers = lines[0].split(',').map((h) => h.trim());
+        if (!headers.includes('studentId') || !headers.includes('courseId')) {
+            throw new BadRequestException('CSV must have studentId and courseId columns');
+        }
+
+        const siIdx = headers.indexOf('studentId');
+        const ciIdx = headers.indexOf('courseId');
+
+        const rows = lines.slice(1).map((line, i) => {
+            const cols = line.split(',').map((c) => c.trim());
+            return { row: i + 2, studentId: cols[siIdx] ?? '', courseId: cols[ciIdx] ?? '' };
+        });
+
+        // Collect unique IDs to bulk-load from DB
+        const courseIds = [...new Set(rows.map((r) => r.courseId).filter(Boolean))];
+        const studentIds = [...new Set(rows.map((r) => r.studentId).filter(Boolean))];
+
+        const [courses, students, existingEnrollments] = await Promise.all([
+            this.prisma.course.findMany({
+                where: { id: { in: courseIds } },
+                select: { id: true, code: true, capacity: true, _count: { select: { enrollments: true } } },
+            }),
+            this.prisma.user.findMany({
+                where: { id: { in: studentIds }, role: 'STUDENT' },
+                select: { id: true },
+            }),
+            this.prisma.enrollment.findMany({
+                where: {
+                    studentId: { in: studentIds },
+                    courseId: { in: courseIds },
+                },
+                select: { studentId: true, courseId: true },
+            }),
+        ]);
+
+        const courseMap = new Map(courses.map((c) => [c.id, c]));
+        const studentSet = new Set(students.map((s) => s.id));
+        const enrolledSet = new Set(existingEnrollments.map((e) => `${e.studentId}:${e.courseId}`));
+
+        // Track seats already claimed within this batch
+        const batchEnrollCount = new Map<string, number>();
+
+        type RowResult = { row: number; studentId: string; courseId: string; status: 'enrolled' | 'skipped' | 'failed'; reason?: string };
+        const results: RowResult[] = [];
+        const toInsert: { studentId: string; courseId: string }[] = [];
+
+        for (const { row, studentId, courseId } of rows) {
+            if (!studentId || !courseId) {
+                results.push({ row, studentId, courseId, status: 'failed', reason: 'missing studentId or courseId' });
+                continue;
+            }
+            if (!studentSet.has(studentId)) {
+                results.push({ row, studentId, courseId, status: 'failed', reason: 'student not found' });
+                continue;
+            }
+            const course = courseMap.get(courseId);
+            if (!course) {
+                results.push({ row, studentId, courseId, status: 'failed', reason: 'course not found' });
+                continue;
+            }
+            if (enrolledSet.has(`${studentId}:${courseId}`)) {
+                results.push({ row, studentId, courseId, status: 'skipped', reason: 'already enrolled' });
+                continue;
+            }
+            const batchExtra = batchEnrollCount.get(courseId) ?? 0;
+            if (course._count.enrollments + batchExtra >= course.capacity) {
+                results.push({ row, studentId, courseId, status: 'failed', reason: `Course ${course.code} is full (${course.capacity}/${course.capacity})` });
+                continue;
+            }
+
+            batchEnrollCount.set(courseId, batchExtra + 1);
+            enrolledSet.add(`${studentId}:${courseId}`); // prevent duplicate within batch
+            toInsert.push({ studentId, courseId });
+            results.push({ row, studentId, courseId, status: 'enrolled' });
+        }
+
+        if (toInsert.length) {
+            await this.prisma.$transaction(
+                toInsert.map((d) => this.prisma.enrollment.create({ data: d })),
+            );
+        }
+
+        return {
+            enrolled: results.filter((r) => r.status === 'enrolled').length,
+            skipped: results.filter((r) => r.status === 'skipped').length,
+            failed: results.filter((r) => r.status === 'failed').length,
+            results,
+        };
+    }
+
     private buildCsv(rows: Record<string, unknown>[]): string {
         const headers = [
             'studentName',
