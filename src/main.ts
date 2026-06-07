@@ -23,7 +23,7 @@ async function bootstrap() {
 
   // Swagger
   const config = new DocumentBuilder()
-    .setTitle('ScholarTrack API')
+    .setTitle('MC Scholar API')
     .setDescription(
       'Academic management system — courses, enrollments, grades, attendance, and reporting.\n\n' +
       'Authentication: sign in via `POST /api/auth/sign-in/email`, then use the `Authorize` button ' +

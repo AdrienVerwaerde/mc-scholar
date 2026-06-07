@@ -1,4 +1,4 @@
-# ScholarTrack — Academic Management API
+# MC Scholar — Academic Management API
 
 A NestJS REST API for managing courses, students, teachers, grades, and attendance in an academic institution.
 
