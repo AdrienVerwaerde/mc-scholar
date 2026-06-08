@@ -46,6 +46,9 @@ lerna-debug.log*
 .temp
 .tmp
 
+# Local test session cookies
+/cookies/
+
 # Runtime data
 pids
 *.pid
@@ -54,5 +57,7 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+/generated/prisma
 
 /generated/prisma
