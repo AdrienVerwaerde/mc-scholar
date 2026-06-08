@@ -47,6 +47,13 @@ export class EnrollmentsController {
         return this.enrollmentsService.unenroll(courseId, user.id);
     }
 
+    @Get('courses/:id/enrollments')
+    @Roles('TEACHER', 'ADMIN')
+    @ApiOperation({ summary: 'List enrolled students for a course' })
+    listByCourse(@Param('id') courseId: string) {
+        return this.enrollmentsService.listByCourse(courseId);
+    }
+
     @Get('me/enrollments')
     @Roles('STUDENT')
     @ApiOperation({ summary: 'List the current student enrollments' })

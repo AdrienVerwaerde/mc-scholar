@@ -51,6 +51,17 @@ export class EnrollmentsService {
         return { deleted: true };
     }
 
+    /** Lists all enrolled students for a course (used by teachers/admins). */
+    async listByCourse(courseId: string) {
+        return this.prisma.enrollment.findMany({
+            where: { courseId },
+            orderBy: { enrolledAt: 'asc' },
+            include: {
+                student: { select: { id: true, name: true, email: true } },
+            },
+        });
+    }
+
     /** Lists the enrollments of a given student (used by /me/enrollments). */
     async listMine(studentId: string) {
         return this.prisma.enrollment.findMany({

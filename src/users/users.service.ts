@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { auth } from '../auth/auth.config';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ListUsersQueryDto } from './dto/list-users.query.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
@@ -89,6 +90,27 @@ export class UsersService {
                 totalPages: Math.ceil(total / query.limit),
             },
         };
+    }
+
+    /** Updates name, email, role, or password of an existing user. */
+    async updateUser(id: string, dto: UpdateUserDto) {
+        await this.findById(id);
+        return this.prisma.user.update({
+            where: { id },
+            data: {
+                ...(dto.name && { name: dto.name }),
+                ...(dto.email && { email: dto.email }),
+                ...(dto.role && { role: dto.role }),
+            },
+            select: { id: true, email: true, name: true, role: true, createdAt: true },
+        });
+    }
+
+    /** Deletes a user by id. */
+    async deleteUser(id: string) {
+        await this.findById(id);
+        await this.prisma.user.delete({ where: { id } });
+        return { deleted: true };
     }
 
     /** Returns a user by id, or 404. */
