@@ -1,9 +1,10 @@
-# MC Scholar — Academic Management API
+# MC Scholar — Academic Management System
 
-A NestJS REST API for managing courses, students, teachers, grades, and attendance in an academic institution.
+A full-stack academic management platform: NestJS REST API + React frontend for managing courses, students, teachers, grades, and attendance.
 
 ## Tech Stack
 
+### Backend
 | Layer | Technology |
 |---|---|
 | Framework | NestJS (TypeScript) |
@@ -13,6 +14,15 @@ A NestJS REST API for managing courses, students, teachers, grades, and attendan
 | Validation | class-validator + class-transformer |
 | Tests | Jest (unit + integration) |
 | API Docs | Swagger / OpenAPI |
+
+### Frontend
+| Layer | Technology |
+|---|---|
+| Framework | React 18 + Vite |
+| Language | TypeScript |
+| Styling | Tailwind CSS v4 |
+| Routing | React Router v6 |
+| Auth | Session cookies (shared with API) |
 
 ---
 
@@ -29,21 +39,32 @@ A NestJS REST API for managing courses, students, teachers, grades, and attendan
 cp .env.example .env
 # Edit BETTER_AUTH_SECRET with a random string (required in production)
 
-# Build and start everything (app + PostgreSQL)
+# Build and start everything (API + frontend + PostgreSQL)
 docker compose up -d --build
 
 # Run Prisma migrations
 docker compose exec app npx prisma migrate deploy
 
-# (Optional) Seed a first admin account
+# Seed the first admin account
 docker compose exec app npx prisma db seed
 ```
 
-The API is available at **http://localhost:3000**.  
-Swagger UI is at **http://localhost:3000/api/docs**.
+> **Default admin credentials** (created by the seed):
+> - Email: `admin@mcscholar.local`
+> - Password: `admin12345`
+>
+> Change the password after first login, or edit `prisma/seed.ts` before seeding to use your own credentials.
+> Running the seed a second time is safe — it will reset the role to `ADMIN` without duplicating the account.
+
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:5173 |
+| API | http://localhost:3000 |
+| Swagger UI | http://localhost:3000/api/docs |
 
 ### Run without Docker
 
+**Backend:**
 ```bash
 # 1. Install dependencies
 npm install
@@ -54,17 +75,31 @@ cp .env.example .env
 # 3. Run migrations
 npx prisma migrate deploy
 
-# 4. Start in watch mode
+# 4. Seed the first admin account
+npx prisma db seed
+
+# 5. Start in watch mode
 npm run start:dev
 ```
+
+**Frontend:**
+```bash
+cd client
+npm install
+npm run dev
+```
+
+The frontend dev server proxies all API requests to `http://localhost:3000` automatically.
 
 ---
 
 ## Scripts
 
+### Backend (root)
+
 | Command | Description |
 |---|---|
-| `npm run start:dev` | Start in watch mode (auto-reload) |
+| `npm run start:dev` | Start API in watch mode (auto-reload) |
 | `npm run start:prod` | Start compiled production build |
 | `npm run build` | Compile TypeScript to `dist/` |
 | `npm run test` | Run unit + integration tests |
@@ -77,6 +112,14 @@ npm run start:dev
 | `npm run docker:rebuild` | Rebuild image and restart |
 | `npm run docker:shell` | Open a shell inside the app container |
 | `npm run docker:prisma` | Run Prisma CLI inside the container |
+
+### Frontend (`cd client`)
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start Vite dev server with HMR |
+| `npm run build` | Type-check and build for production |
+| `npm run preview` | Preview the production build locally |
 
 ---
 
@@ -113,6 +156,41 @@ Reporting and bulk operations for administrators.
 
 ### `RateLimitModule`
 Manual sliding-window rate limiter applied globally. Identifies clients by authenticated user ID or IP address. Returns `429 Too Many Requests` with a `Retry-After` header when the threshold is exceeded.
+
+---
+
+## Frontend
+
+The `client/` directory contains the React + Vite frontend. It communicates with the API exclusively through session cookies — no tokens to manage manually.
+
+### Pages & Permissions
+
+| Page | Route | STUDENT | TEACHER | ADMIN |
+|---|---|---|---|---|
+| Login | `/login` | ✓ | ✓ | ✓ |
+| Courses | `/courses` | Browse, enroll/unenroll | Browse, create, delete | Browse, create, delete |
+| Course detail | `/courses/:id` | View weights & grades | Edit weights, manage grades & sessions | Edit weights, manage grades, sessions & attendance |
+| My Enrollments | `/enrollments` | ✓ | — | — |
+| My Grades | `/my-grades` | ✓ | — | — |
+| Grades | `/grades` | — | ✓ | ✓ |
+| Users | `/users` | — | — | ✓ |
+| Admin Dashboard | `/admin` | — | — | ✓ |
+
+### Course Detail Tabs
+
+| Tab | Available to | Features |
+|---|---|---|
+| Overview | All | View evaluation weights; TEACHER/ADMIN can edit weights and course metadata |
+| Grades | TEACHER / ADMIN | List grades, add grade, delete grade, import grades from CSV |
+| My Grades | STUDENT | Read-only view of own grades |
+| Sessions | TEACHER / ADMIN | List class sessions, create new session |
+| Attendance | TEACHER / ADMIN | Per-student attendance rates, at-risk highlighting (< 70%) |
+
+### Admin Dashboard
+
+- **Semester statistics** — course count, student count, at-risk count, per-course breakdown
+- **CSV export** — download full semester results as a CSV file
+- **Bulk enrollment import** — upload a CSV (`studentEmail,courseCode,semester`) to enroll students in bulk
 
 ---
 
